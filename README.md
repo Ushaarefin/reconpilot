@@ -41,8 +41,17 @@ Subscription businesses keep two sets of truth: **Braintree**, which actually mo
    git clone <this repo> && cd reconpilot
    python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
    pip install -r requirements.txt
-   cp .env.example .env        # then paste your Braintree keys and an Anthropic (or OpenAI) key
    python app.py
+   ```
+   Before running, create a `.env` file in the project folder:
+   ```bash
+   BT_MERCHANT_ID=your_merchant_id
+   BT_PUBLIC_KEY=your_public_key
+   BT_PRIVATE_KEY=your_private_key
+   # Optional
+   BT_CURRENCY=                # auto-detected if blank
+   ANTHROPIC_API_KEY=          # or OPENAI_API_KEY; without either, a rule-based fallback is used
+   AI_MODEL=                   # e.g. claude-sonnet-5-5 or gpt-4o-mini
    ```
 3. Open http://localhost:5000
 4. Click **1 · Seed Braintree sandbox**. This creates 13 customers, a plan, subscriptions, charges, a duplicate charge, a refund and a past-due renewal in *your* sandbox, plus an internal ledger with realistic errors (takes about 30–60s).
