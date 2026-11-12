@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReconPilot · AI subscription reconciliation on Braintree</title>
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@33.3.2/dist/ag-grid-community.min.js"></script>
+<style>
+  :root { --bg:#f6f7fb; --card:#fff; --ink:#0f172a; --mute:#64748b; --line:#e2e8f0;
+          --brand:#003087; --brand2:#0070e0; --red:#dc2626; --amber:#d97706; --green:#16a34a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--ink); }
+  header { position:sticky; top:0; z-index:10; background:rgba(255,255,255,.86); backdrop-filter:saturate(180%) blur(12px);
+           border-bottom:1px solid var(--line); padding:0 24px; height:64px; display:flex; align-items:center; gap:14px; }
+  .brand { display:flex; align-items:center; gap:11px; text-decoration:none; color:var(--ink); }
+  .mark { width:34px; height:34px; border-radius:10px; display:grid; place-items:center; flex:none;
+          background:linear-gradient(135deg, #001c64 0%, #003087 45%, #0070e0 100%);
+          box-shadow:0 1px 2px rgba(0,48,135,.25), inset 0 1px 0 rgba(255,255,255,.18); }
+  .brand h1 { font-size:17px; margin:0; letter-spacing:-.4px; font-weight:700; }
+  .brand h1 span { color:var(--brand2); }
+  header .tag { color:var(--mute); font-size:13px; padding-left:14px; border-left:1px solid var(--line); line-height:20px; }
+  header .spacer { flex:1; }
+  .meta { display:flex; align-items:center; }
+  .meta-item { display:flex; flex-direction:column; gap:1px; padding:0 16px; border-left:1px solid var(--line); }
+  .meta-item:first-child { border-left:0; }
+  .meta-item small { font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color:#94a3b8; font-weight:600; }
+  .meta-item span { font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 0 3px rgba(22,163,74,.15); }
+  .dot.idle { background:#94a3b8; box-shadow:0 0 0 3px rgba(148,163,184,.18); }
+  .meta-item .sub { font-weight:500; color:var(--mute); }
+  @media (max-width: 900px) { header .tag, .meta-item.opt { display:none; } }
+  button { font:inherit; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600; }
+  .btn { background:var(--brand2); color:#fff; } .btn:hover { filter:brightness(1.1); }
+  .btn.ghost { background:#fff; color:var(--brand); border:1px solid var(--line); }
+  .btn.ok { background:var(--green); } button:disabled { opacity:.5; cursor:wait; }
+  main { padding:20px 24px; display:grid; grid-template-columns: 1fr 380px; gap:20px; }
+  .kpis { grid-column:1 / -1; display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .kpi .label { color:var(--mute); font-size:13px; } .kpi .val { font-size:28px; font-weight:700; margin-top:4px; }
+  .kpi.risk .val { color:var(--red); }
+  #grid { height:520px; }
+  .toolbar { display:flex; gap:10px; align-items:center; margin-bottom:12px; }
+  .toolbar .hint { color:var(--mute); font-size:13px; margin-left:auto; }
+  .sev { padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
+  .sev.high { background:#fee2e2; color:var(--red);} .sev.medium { background:#fef3c7; color:var(--amber);}
+  .sev.none { background:#dcfce7; color:var(--green);}
+  aside { display:flex; flex-direction:column; gap:16px; }
+  aside h3 { margin:0 0 8px; font-size:15px; }
+  .muted { color:var(--mute); font-size:13px; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:4px 8px; font-size:13px; margin:8px 0; }
+  .kv b { color:var(--mute); font-weight:500; }
+  .ai { background:#f1f5ff; border:1px solid #c7d7fe; border-radius:10px; padding:12px; font-size:13px; line-height:1.45; }
+  .ai h4 { margin:8px 0 2px; font-size:12px; text-transform:uppercase; letter-spacing:.5px; color:var(--brand); }
+  .ai pre { white-space:pre-wrap; font-family:inherit; background:#fff; padding:8px; border-radius:6px; border:1px solid var(--line); margin:4px 0 0; }
+  textarea, input { width:100%; font:inherit; padding:9px; border:1px solid var(--line); border-radius:8px; }
+  #log div { font-size:12px; padding:6px 0; border-bottom:1px solid var(--line); }
+  /* Ask your books */
+  .ask-head { display:flex; align-items:baseline; justify-content:space-between; }
+  .thread { display:flex; flex-direction:column; gap:12px; max-height:380px; overflow-y:auto; margin:4px 0 12px; }
+  .thread:empty { display:none; }
+  .q-bubble { align-self:flex-end; max-width:85%; background:var(--brand); color:#fff; font-size:13px;
+              padding:8px 12px; border-radius:14px 14px 4px 14px; line-height:1.4; }
+  .a-card { align-self:stretch; background:#f8fafc; border:1px solid var(--line); border-radius:4px 14px 14px 14px; padding:12px; }
+  .a-head { font-size:13.5px; line-height:1.5; font-weight:500; }
+  .a-head p { margin:0 0 6px; } .a-head p:last-child { margin:0; }
+  .a-head ul { margin:4px 0 0; padding-left:18px; } .a-head li { margin:3px 0; }
+  .a-rows { margin-top:10px; border-top:1px solid var(--line); }
+  .a-row { display:grid; grid-template-columns:10px 1fr auto; gap:4px 10px; align-items:start; padding:9px 0; border-bottom:1px solid var(--line); }
+  .a-row:last-child { border-bottom:0; padding-bottom:0; }
+  .a-row i { width:8px; height:8px; border-radius:50%; margin-top:5px; background:var(--red); }
+  .a-row i.medium { background:var(--amber); }
+  .a-row .t { font-size:13px; font-weight:600; } .a-row .c { grid-column:2; font-size:12px; color:var(--mute); margin-top:1px; }
+  .a-row .amt { font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .a-row .amt small { font-weight:500; color:var(--mute); }
+  .a-foot { margin-top:8px; font-size:11px; color:#94a3b8; }
+  .a-card.thinking .a-head { color:var(--mute); font-weight:400; }
+  .ask-box { display:flex; gap:6px; }
+  .ask-box input { flex:1; border-radius:10px; padding:10px 12px; font-size:13.5px; }
+  .thread:not(:empty) ~ .chips { display:none; }
+  .ask-box input:focus { outline:none; border-color:var(--brand2); box-shadow:0 0 0 3px rgba(0,112,224,.15); }
+  .ask-box button { background:var(--brand); color:#fff; border-radius:10px; padding:0 14px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .chip { font-size:12px; font-weight:500; padding:5px 10px; border-radius:99px; background:#fff; color:var(--brand);
+          border:1px solid #c7d7fe; } .chip:hover { background:#f1f5ff; }
+  .empty { text-align:center; padding:60px 20px; color:var(--mute); }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
+           padding:10px 16px; border-radius:8px; font-size:14px; display:none; max-width:80vw; }
+  .ag-row.break-high { background:#fff5f5; } .ag-row.break-medium { background:#fffbeb; }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">
+    <span class="mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7h11"/><path d="M4 12h7"/><path d="M4 17h5"/><path d="m13 16 2.5 2.5L21 13"/>
+      </svg>
+    </span>
+    <h1>Recon<span>Pilot</span></h1>
+  </a>
+  <span class="tag">Subscription ledger vs. Braintree, reconciled</span>
+  <span class="spacer"></span>
+  <div class="meta">
+    <div class="meta-item" title="Payments are read from and fixed in your Braintree sandbox account">
+      <small>Payments</small><span><i class="dot" id="srcDot"></i>Braintree <span class="sub">Sandbox</span></span>
+    </div>
+    <div class="meta-item opt" title="When the sandbox data was last generated">
+      <small>Last seeded</small><span id="lastSync" class="sub">Not yet</span>
+    </div>
+    <div class="meta-item" title="{% if ai_provider == 'rules' %}No AI key set: answers come from built-in rules. Add ANTHROPIC_API_KEY to .env for AI analysis.{% else %}Breaks are investigated by an AI analyst{% endif %}">
+      <small>Analyst</small><span><i class="dot {% if ai_provider == 'rules' %}idle{% endif %}"></i>{% if ai_provider == 'claude' %}Claude{% elif ai_provider == 'openai' %}OpenAI{% else %}Rule engine{% endif %}</span>
+    </div>
+  </div>
+</header>
+<main>
+  <section class="kpis">
+    <div class="card kpi risk"><div class="label">Revenue at risk / month</div><div class="val" id="k-risk">–</div></div>
+    <div class="card kpi"><div class="label">Breaks found</div><div class="val" id="k-breaks">–</div></div>
+    <div class="card kpi"><div class="label">Match rate</div><div class="val" id="k-match">–</div></div>
+    <div class="card kpi"><div class="label">Subscriptions checked</div><div class="val" id="k-subs">–</div></div>
+  </section>
+
+  <section class="card">
+    <div class="toolbar">
+      <button class="btn ghost" id="seedBtn" onclick="seed()">1 · Seed Braintree sandbox</button>
+      <button class="btn" id="reconBtn" onclick="runRecon()">2 · Run reconciliation</button>    </div>
+    <div id="grid"></div>
+  </section>
+
+  <aside>
+    <div class="card" id="detail">
+      <h3>Break details</h3>
+      <div class="muted">Select a row to investigate it with AI and approve a fix.</div>
+    </div>
+    <div class="card">
+      <div class="ask-head"><h3>Ask your books</h3><span class="muted" style="font-size:11px">{% if ai_provider == 'claude' %}Claude{% elif ai_provider == 'openai' %}OpenAI{% else %}Rule engine{% endif %}</span></div>
+      <div class="thread" id="thread"></div>
+      <form class="ask-box" onsubmit="event.preventDefault(); askQ()">
+        <input id="q" placeholder="Ask about revenue, refunds, renewals…" autocomplete="off">
+        <button type="submit" aria-label="Ask">&#8593;</button>
+      </form>
+      <div class="chips" id="chips">
+        <button class="chip" onclick="askQ(this.textContent)">How much are we losing to failed renewals?</button>
+        <button class="chip" onclick="askQ(this.textContent)">Any duplicate charges?</button>
+        <button class="chip" onclick="askQ(this.textContent)">Who has access without paying?</button>
+        <button class="chip" onclick="askQ(this.textContent)">Summarize all breaks</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Agent activity</h3>
+      <div id="log"><div class="muted">No actions yet.</div></div>
+    </div>
+  </aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const money = v => v == null ? '–' : '$' + Number(v).toFixed(2);
+let gridApi, rows = [], selected = null;
+
+function sevRenderer(p) {
+  const s = document.createElement('span');
+  s.className = 'sev ' + p.data.severity; s.textContent = p.value; return s;
+}
+gridApi = agGrid.createGrid(document.getElementById('grid'), {
+  rowData: [],
+  columnDefs: [
+    { field: 'label', headerName: 'Status', cellRenderer: sevRenderer, width: 250, pinned: 'left' },
+    { field: 'customer', width: 140 },
+    { field: 'amount_at_risk', headerName: 'At risk', valueFormatter: p => p.value ? money(p.value) : '', width: 100, sort: 'desc' },
+    { field: 'ledger_status', headerName: 'Ledger status', width: 130 },
+    { field: 'bt_status', headerName: 'Braintree status', width: 140 },
+    { field: 'ledger_price', headerName: 'Ledger price', valueFormatter: p => money(p.value), width: 115 },
+    { field: 'bt_price', headerName: 'BT price', valueFormatter: p => money(p.value), width: 100 },
+    { field: 'charges', headerName: 'Live charges', width: 110 },
+    { field: 'subscription_id', headerName: 'Subscription', width: 130 },
+  ],
+  defaultColDef: { sortable: true, filter: true, resizable: true },
+  rowClassRules: { 'break-high': p => p.data.severity === 'high', 'break-medium': p => p.data.severity === 'medium' },
+  overlayNoRowsTemplate: '<div class="empty">No data yet. Click <b>1 · Seed Braintree sandbox</b>, then <b>2 · Run reconciliation</b>.</div>',
+  onRowClicked: e => showDetail(e.data),
+});
+
+function toast(msg, ms = 3500) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', ms); }
+async function api(path, opts = {}) {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, ...opts });
+  const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j;
+}
+function render(data) {
+  rows = data.rows || []; gridApi.setGridOption('rowData', rows);
+  const s = data.summary;
+  document.getElementById('k-risk').textContent = s ? money(s.amount_at_risk) : '–';
+  document.getElementById('k-breaks').textContent = s ? s.breaks : '–';
+  document.getElementById('k-match').textContent = s ? s.match_rate + '%' : '–';
+  document.getElementById('k-subs').textContent = s ? s.subscriptions : '–';
+  if (s && s.seeded_at) document.getElementById('lastSync').textContent = fmtSeeded(s.seeded_at);
+  if (data.log && data.log.length) document.getElementById('log').innerHTML = data.log.map(l => `<div>✅ ${esc(l.msg)}</div>`).join('');
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function busy(btn, label, fn) { const b = document.getElementById(btn), old = b.textContent; b.disabled = true; b.textContent = label; try { await fn(); } catch (e) { toast('⚠️ ' + e.message, 7000); } finally { b.disabled = false; b.textContent = old; } }
+function seed() { busy('seedBtn', 'Creating customers & subscriptions in Braintree…', async () => { render(await api('/api/seed')); toast('Sandbox seeded and reconciled'); }); }
+function runRecon() { busy('reconBtn', 'Pulling Braintree data…', async () => { render(await api('/api/recon', { method: 'GET' })); toast('Reconciliation complete'); }); }
+
+function showDetail(r) {
+  selected = r;
+  const d = document.getElementById('detail');
+  const isBreak = r.break_type !== 'MATCHED';
+  d.innerHTML = `<h3>${esc(r.customer)} <span class="sev ${r.severity}">${esc(r.label)}</span></h3>
+    <div class="muted">${esc(r.detail)}</div>
+    <div class="kv"><b>Subscription</b><span>${esc(r.subscription_id)}</span>
+      <b>Ledger</b><span>${esc(r.ledger_status)} · ${money(r.ledger_price)}</span>
+      <b>Braintree</b><span>${esc(r.bt_status)} · ${money(r.bt_price)}</span>
+      ${r.tx_id ? `<b>Transaction</b><span>${esc(r.tx_id)}</span>` : ''}
+      ${isBreak ? `<b>At risk</b><span style="color:var(--red);font-weight:600">${money(r.amount_at_risk)}</span>` : ''}</div>
+    ${isBreak ? `<button class="btn" id="explainBtn" onclick="explain()">✨ Investigate with AI</button>
+      <div id="aiOut" style="margin-top:12px"></div>` : ''}`;
+}
+function explain() {
+  busy('explainBtn', 'AI is investigating…', async () => {
+    const a = await api('/api/explain/' + selected.id);
+    document.getElementById('aiOut').innerHTML = `<div class="ai">
+      <h4>Root cause</h4>${esc(a.root_cause)}
+      <h4>Impact</h4>${esc(a.impact)}
+      <h4>Recommendation <span class="muted">(confidence: ${esc(a.confidence)})</span></h4>${esc(a.recommendation)}
+      ${a.customer_email ? `<h4>Draft customer email</h4><pre>${esc(a.customer_email)}</pre>` : ''}
+      ${a.note ? `<div class="muted" style="margin-top:6px">${esc(a.note)}</div>` : ''}
+      <h4>Proposed action</h4>${esc(selected.fix_label)}
+      <div style="margin-top:10px"><button class="btn ok" id="fixBtn" onclick="fix()">Approve &amp; execute fix</button></div></div>`;
+  });
+}
+function fix() {
+  busy('fixBtn', 'Executing…', async () => {
+    const r = await api('/api/fix/' + selected.id);
+    render(r); toast('✅ ' + r.result, 5000);
+    document.getElementById('detail').innerHTML = `<h3>Fixed</h3><div class="muted">${esc(r.result)}</div>`;
+  });
+}
+function fmtSeeded(ts) {
+  const d = new Date(ts.replace(' ', 'T')); if (isNaN(d)) return ts;
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? 'Today, ' + t : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + t;
+}
+// Free-text AI answers: paragraphs + "-"/"•"/"1." lines become a list.
+function fmtText(txt) {
+  let html = '', list = [];
+  const flush = () => { if (list.length) { html += '<ul>' + list.map(l => `<li>${l}</li>`).join('') + '</ul>'; list = []; } };
+  for (const raw of String(txt).split('\n')) {
+    const line = esc(raw.trim()).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    if (!line) { flush(); continue; }
+    const m = line.match(/^(?:[-•*]|\d+[.)])\s+(.*)/);
+    if (m) list.push(m[1]); else { flush(); html += `<p>${line}</p>`; }
+  }
+  flush(); return html;
+}
+function answerHtml(a) {
+  const rows = (a.items || []).map(g => `<div class="a-row"><i class="${esc(g.severity)}"></i>
+      <span class="t">${esc(g.label)}${g.count > 1 ? ` <span class="muted">×${g.count}</span>` : ''}</span>
+      <span class="amt">${money(g.amount)}<small>/mo</small></span>
+      <span class="c">${esc(g.customers.join(', '))}</span></div>`).join('');
+  return `<div class="a-head">${fmtText(a.answer)}</div>${rows ? `<div class="a-rows">${rows}</div>` : ''}
+    ${a.provider === 'rules' ? '<div class="a-foot">Computed from the current reconciliation · add an AI key for open-ended questions</div>' : ''}`;
+}
+async function askQ(preset) {
+  const input = document.getElementById('q');
+  const q = (preset || input.value).trim(); if (!q) return;
+  input.value = '';
+  const thread = document.getElementById('thread');
+  thread.insertAdjacentHTML('beforeend', `<div class="q-bubble">${esc(q)}</div><div class="a-card thinking"><div class="a-head">Reading the books…</div></div>`);
+  const card = thread.lastElementChild; thread.scrollTop = thread.scrollHeight;
+  try { const a = await api('/api/ask', { body: JSON.stringify({ question: q }) }); card.innerHTML = answerHtml(a); }
+  catch (e) { card.innerHTML = `<div class="a-head" style="color:var(--red)">⚠️ ${esc(e.message)}</div>`; }
+  card.classList.remove('thinking'); thread.scrollTop = thread.scrollHeight;
+}
+api('/api/recon', { method: 'GET' }).then(render).catch(() => {});
+</script>
+</body>
+</html>

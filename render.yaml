@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: reconpilot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 180 --workers 1
+    envVars:
+      - key: BT_MERCHANT_ID
+        sync: false
+      - key: BT_PUBLIC_KEY
+        sync: false
+      - key: BT_PRIVATE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
